@@ -201,38 +201,62 @@ if (document.getElementById('add-student-form')) {
     });
 }
 
-// Search student functionality
-if (document.getElementById('student-search-form')) {
-    document.getElementById('student-search-form').addEventListener('submit', (e) => {
+// Add student functionality
+if (document.getElementById('add-student-form')) {
+    document.getElementById('add-student-form').addEventListener('submit', (e) => {
         e.preventDefault();
-        const studentId = document.getElementById('searchStudentId').value;
-        const errorElement = document.getElementById('search-error');
-
-        db.collection('students').doc(studentId).get()
-            .then((doc) => {
-                if (doc.exists) {
-                    const studentData = doc.data();
-                    console.log("Student found:", studentData);
-
-                    document.getElementById('s-studentId').textContent = studentData.studentId;
-                    document.getElementById('s-name').textContent = studentData.name;
-                    document.getElementById('s-fathername').textContent = studentData.fathername || '';
-                    document.getElementById('s-mothername').textContent = studentData.mothername || '';
-                    document.getElementById('s-mobilenumber').textContent = studentData.mobilenumber || '';
-                    document.getElementById('s-course').textContent = studentData.course;
-                    document.getElementById('s-year').textContent = studentData.year;
-                    document.getElementById('s-totalfee').textContent = studentData.totalfee.toFixed(2);
-                    document.getElementById('s-balancefee').textContent = studentData.balancefee.toFixed(2);
-
-                    errorElement.textContent = '';
-                    document.getElementById('search-section').classList.add('hidden');
-                    document.getElementById('student-details-section').classList.remove('hidden');
-                } else {
-                    errorElement.textContent = 'No student found with that ID';
-                }
+        
+        // Get form values
+        const totalfee = parseFloat(document.getElementById('totalfee').value);
+        const balancefee = parseFloat(document.getElementById('balancefee').value);
+        const messageElement = document.getElementById('add-student-message');
+        
+        // Clear previous messages
+        messageElement.textContent = '';
+        messageElement.style.color = '';
+        
+        // Validate fees
+        if (isNaN(totalfee) || isNaN(balancefee)) {
+            messageElement.textContent = 'Please enter valid numbers for fees';
+            messageElement.style.color = 'red';
+            return;
+        }
+        
+        if (balancefee > totalfee) {
+            messageElement.textContent = 'Error: Balance fee cannot be greater than total fee!';
+            messageElement.style.color = 'red';
+            // Highlight problematic fields
+            document.getElementById('totalfee').style.border = '1px solid red';
+            document.getElementById('balancefee').style.border = '1px solid red';
+            return;
+        }
+        
+        // Prepare student data
+        const studentData = {
+            studentId: document.getElementById('studentId').value,
+            name: document.getElementById('name').value,
+            fathername: document.getElementById('fathername').value,
+            mothername: document.getElementById('mothername').value,
+            mobilenumber: document.getElementById('mobilenumber').value,
+            course: document.getElementById('course').value,
+            year: document.getElementById('year').value,
+            totalfee: totalfee,
+            balancefee: balancefee
+        };
+        
+        // Save to database
+        db.collection('students').doc(studentData.studentId).set(studentData)
+            .then(() => {
+                messageElement.textContent = 'Student added successfully!';
+                messageElement.style.color = 'green';
+                document.getElementById('add-student-form').reset();
+                // Remove error highlights
+                document.getElementById('totalfee').style.border = '';
+                document.getElementById('balancefee').style.border = '';
             })
             .catch((error) => {
-                errorElement.textContent = error.message;
+                messageElement.textContent = error.message;
+                messageElement.style.color = 'red';
             });
     });
 }
