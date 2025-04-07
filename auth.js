@@ -170,37 +170,6 @@ function setupDashboardNavigation() {
         });
     }
 }
-
-// Add student functionality
-if (document.getElementById('add-student-form')) {
-    document.getElementById('add-student-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-
-        const studentData = {
-            studentId: document.getElementById('studentId').value,
-            name: document.getElementById('name').value,
-            fathername: document.getElementById('fathername').value,
-            mothername: document.getElementById('mothername').value,
-            mobilenumber: document.getElementById('mobilenumber').value,
-            course: document.getElementById('course').value,
-            year: document.getElementById('year').value,
-            totalfee: parseFloat(document.getElementById('totalfee').value),
-            balancefee: parseFloat(document.getElementById('balancefee').value)
-        };
-
-        db.collection('students').doc(studentData.studentId).set(studentData)
-            .then(() => {
-                document.getElementById('add-student-message').textContent = 'Student added successfully!';
-                document.getElementById('add-student-message').style.color = 'green';
-                document.getElementById('add-student-form').reset();
-            })
-            .catch((error) => {
-                document.getElementById('add-student-message').textContent = error.message;
-                document.getElementById('add-student-message').style.color = 'red';
-            });
-    });
-}
-
 // Add student functionality
 if (document.getElementById('add-student-form')) {
     document.getElementById('add-student-form').addEventListener('submit', (e) => {
@@ -257,6 +226,41 @@ if (document.getElementById('add-student-form')) {
             .catch((error) => {
                 messageElement.textContent = error.message;
                 messageElement.style.color = 'red';
+            });
+    });
+}
+// Search student functionality
+if (document.getElementById('student-search-form')) {
+    document.getElementById('student-search-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const studentId = document.getElementById('searchStudentId').value;
+        const errorElement = document.getElementById('search-error');
+
+        db.collection('students').doc(studentId).get()
+            .then((doc) => {
+                if (doc.exists) {
+                    const studentData = doc.data();
+                    console.log("Student found:", studentData);
+
+                    document.getElementById('s-studentId').textContent = studentData.studentId;
+                    document.getElementById('s-name').textContent = studentData.name;
+                    document.getElementById('s-fathername').textContent = studentData.fathername || '';
+                    document.getElementById('s-mothername').textContent = studentData.mothername || '';
+                    document.getElementById('s-mobilenumber').textContent = studentData.mobilenumber || '';
+                    document.getElementById('s-course').textContent = studentData.course;
+                    document.getElementById('s-year').textContent = studentData.year;
+                    document.getElementById('s-totalfee').textContent = studentData.totalfee.toFixed(2);
+                    document.getElementById('s-balancefee').textContent = studentData.balancefee.toFixed(2);
+
+                    errorElement.textContent = '';
+                    document.getElementById('search-section').classList.add('hidden');
+                    document.getElementById('student-details-section').classList.remove('hidden');
+                } else {
+                    errorElement.textContent = 'No student found with that ID';
+                }
+            })
+            .catch((error) => {
+                errorElement.textContent = error.message;
             });
     });
 }
