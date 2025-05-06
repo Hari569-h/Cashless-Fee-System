@@ -361,23 +361,8 @@ async function processPaymentAndUpdateDatabase(studentId, paymentAmount, current
             })
         });
 
-        await db.collection('payments').doc(transactionId).set({
-            studentId: studentId,
-            studentName: document.getElementById('s-name').textContent,
-            amount: paymentAmount,
-            date: new Date(),
-            timestamp: firebase.firestore.FieldValue.serverTimestamp(), // Added server timestamp
-            transactionId: transactionId,
-            processedBy: processedBy,
-            method: paymentMethod,
-            status: 'completed'
-        });
-
-        document.getElementById('s-balancefee').textContent = newBalance.toFixed(2);
-        document.getElementById('payment-amount').value = '';
-        showSuccess(document.getElementById('payment-message'), `Payment of ₹${paymentAmount.toFixed(2)} successful! (Method: ${paymentMethod})`);
-
-        await generateReceipt({
+        // Generate receipt data first to get the receipt number
+        const receiptData = {
             studentId,
             studentName: document.getElementById('s-name').textContent,
             fatherName: document.getElementById('s-fathername').textContent,
@@ -388,7 +373,28 @@ async function processPaymentAndUpdateDatabase(studentId, paymentAmount, current
             transactionId,
             processedBy,
             paymentMethod
+        };
+        
+        // Generate the receipt which will create and store the receipt number
+        await generateReceipt(receiptData);
+        
+        // Now save the payment with the receipt number included
+        await db.collection('payments').doc(transactionId).set({
+            studentId: studentId,
+            studentName: document.getElementById('s-name').textContent,
+            amount: paymentAmount,
+            date: new Date(),
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            transactionId: transactionId,
+            processedBy: processedBy,
+            method: paymentMethod,
+            status: 'completed',
+            receiptNumber: receiptData.receiptNumber // Add the receipt number to the payment record
         });
+
+        document.getElementById('s-balancefee').textContent = newBalance.toFixed(2);
+        document.getElementById('payment-amount').value = '';
+        showSuccess(document.getElementById('payment-message'), `Payment of ₹${paymentAmount.toFixed(2)} successful! (Method: ${paymentMethod})`);
 
     } catch (error) {
         console.error('Error processing payment:', error);
@@ -400,100 +406,105 @@ async function processPaymentAndUpdateDatabase(studentId, paymentAmount, current
 async function generateReceipt(data) {
     try {
         const { jsPDF } = window.jspdf;
+        if (!jsPDF) throw new Error("jspdf library not loaded");
+        
         const doc = new jsPDF();
-
-        doc.setProperties({
-            title: `Fee Receipt - ${data.studentId}`,
-            subject: 'College Fee Payment',
-            author: 'Sri Venkateshwara Engineering College',
-            creator: 'Cashless Fee System'
-        });
-
+        const pageWidth = doc.internal.pageSize.getWidth();
+        // Get current date and time
+        const now = new Date();
+        const formattedDate = now.toLocaleDateString();
+        const formattedTime = now.toLocaleTimeString();
+        
+        // Add College Header
         doc.setFontSize(18);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(40, 53, 147);
-        doc.text("SRI VENKATESHWARA ENGINEERING COLLEGE", 105, 20, { align: 'center' });
-
-        doc.setFontSize(14);
-        doc.setTextColor(0, 0, 0);
-        doc.text("OFFICIAL FEE PAYMENT RECEIPT", 105, 30, { align: 'center' });
-
-        doc.setDrawColor(0);
-        doc.setLineWidth(0.3);
-        doc.line(15, 35, 195, 35);
-
-        doc.setFontSize(10);
-        doc.text(`Receipt No: SVEC-${data.transactionId.slice(0, 8)}`, 20, 45);
-        doc.text(`Date: ${new Date().toLocaleString('en-IN')}`, 150, 45);
-
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(0, 107, 84); // College color theme
+        doc.text("SRI VENKATESHWARA ENGINEERING COLLEGE", pageWidth/2, 20, { align: 'center' });
+        
+        // Add College Subheader
         doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text("STUDENT INFORMATION", 20, 55);
-
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Student ID: ${data.studentId}`, 20, 65);
-        doc.text(`Name: ${data.studentName}`, 20, 75);
-        doc.text(`Father's Name: ${data.fatherName}`, 20, 85);
-        doc.text(`Course: ${data.course}`, 20, 95);
-        doc.text(`Year: ${data.year}`, 150, 95);
-
-        doc.setFont('helvetica', 'bold');
-        doc.text("PAYMENT DETAILS", 20, 110);
-
+        doc.setTextColor(0, 0, 0);
+        doc.text("Affiliated to JNTU-H, Suryapet-508213, Telangana", pageWidth/2, 28, { align: 'center' });
+        
+        // Generate a unique receipt number using timestamp and random component
+        const timestamp = Date.now();
+        const randomComponent = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        const receiptNumber = `SVEC-${timestamp.toString().slice(-6)}-${randomComponent}`;
+        
+        // Store receipt number in data object for database reference
+        data.receiptNumber = receiptNumber;
+        
+        // Add receipt number with bold formatting on left side
+        doc.setFillColor(240, 240, 240); // Light gray background
+        doc.roundedRect(15, 35, 80, 10, 2, 2, 'F');
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(158, 27, 50); // Crimson color for emphasis
+        doc.text(`RECEIPT NO: ${receiptNumber}`, 20, 42);
+        
+        // Add Receipt Title
+        doc.setFontSize(16);
+        doc.setTextColor(0, 0, 0);
+        doc.text(`OFFICIAL FEE PAYMENT RECEIPT`, pageWidth/2, 50, { align: 'center' });
+        
+        // Add receipt details using autoTable
         doc.autoTable({
-            startY: 115,
-            head: [
+            startY: 57,
+            head: [[
+                { content: 'Student Details', styles: { fillColor: [158, 27, 50] } },
+                { content: 'Payment Details', styles: { fillColor: [158, 27, 50] } }
+            ]],
+            body: [
                 [
-                    { content: 'Description', styles: { fillColor: [51, 153, 204] } },
-                    { content: 'Amount (₹)', styles: { fillColor: [51, 153, 204], halign: 'right' } }
+                    `Student ID: ${data.studentId}\nName: ${data.studentName}\nCourse: ${data.course}\nYear: ${data.year}`,
+                    `Transaction ID: ${data.transactionId}\nDate: ${formattedDate}\nTime: ${formattedTime}\nPayment Mode: ${data.paymentMethod}`
                 ]
             ],
+            styles: { cellPadding: 1, fontSize: 10 },
+            theme: 'grid'
+        });
+        
+        // Add payment breakdown table
+        doc.autoTable({
+            startY: doc.lastAutoTable.finalY + 10,
+            head: [['Description', 'Amount (₹)']],
             body: [
-                ['Fee Payment', formatCurrency(data.amountPaid)],
-                ['Previous Balance', formatCurrency(data.amountPaid + data.newBalance)],
-                ['Amount Paid', { content: formatCurrency(data.amountPaid), styles: { fontStyle: 'bold' } }],
-                ['Remaining Balance', formatCurrency(data.newBalance)],
-                ['Payment Method', data.paymentMethod]
+                ['Total Fee', formatCurrency(data.amountPaid + data.newBalance)],
+                ['Amount Paid', formatCurrency(data.amountPaid)],
+                ['Balance Due', formatCurrency(data.newBalance)]
             ],
-            styles: {
-                cellPadding: 5,
-                fontSize: 10,
-                valign: 'middle'
+            styles: { 
+                fillColor: [240, 240, 240],
+                textColor: [0, 0, 0],
+                fontSize: 10
             },
             columnStyles: {
-                1: { halign: 'right' }
-            },
-            margin: { top: 5 }
+                1: { cellWidth: 40, halign: 'right' }
+            }
         });
 
-        const finalY = doc.lastAutoTable.finalY + 10;
-        doc.setFontSize(11);
-        doc.text(`Payment Mode: ${data.paymentMethod}`, 20, finalY);
-        doc.text(`Transaction ID: ${data.transactionId}`, 20, finalY + 8);
-
+        // Add footer
+        const footerY = doc.lastAutoTable.finalY + 15;
         doc.setFontSize(10);
-        doc.setTextColor(100, 100, 100);
-        doc.text(`Processed by: ${data.processedBy}`, 20, finalY + 20);
-        doc.text("This is a computer generated receipt.", 105, finalY + 30, { align: 'center' });
-        doc.text("Thank you for your payment!", 105, finalY + 40, { align: 'center' });
-
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        doc.save(`SVEC_Fee_Receipt_${data.studentId}_${timestamp}.pdf`);
-
+        doc.setTextColor(100);
+        doc.text(`Processed by: ${data.processedBy}`, 20, footerY);
+        doc.text("This is a computer generated receipt", pageWidth/2, footerY, { align: 'center' });
+        doc.text("Thank you for your payment!", pageWidth/2, footerY + 5, { align: 'center' });
+        
+        // Use receipt number in filename format
+        const fileName = `SVEC_Receipt_${receiptNumber}.pdf`;
+        doc.save(fileName);
+        
+        // Store in Firestore
+        const pdfData = doc.output('datauristring');
         await db.collection('receipts').doc(data.transactionId).set({
-            studentId: data.studentId,
-            studentName: data.studentName,
-            amount: data.amountPaid,
-            date: new Date(),
-            timestamp: firebase.firestore.FieldValue.serverTimestamp(), // Added server timestamp
-            transactionId: data.transactionId,
-            processedBy: data.processedBy,
-            paymentMethod: data.paymentMethod,
-            receiptData: doc.output('datauristring')
+            ...data,
+            pdfData,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
 
     } catch (error) {
-        console.error('Receipt generation failed:', error);
+        console.error('PDF generation failed:', error);
         generateSimpleReceipt(data);
     }
 }
@@ -505,12 +516,19 @@ function formatCurrency(amount) {
 
 // Fallback simple receipt
 function generateSimpleReceipt(data) {
+    // Generate a unique receipt number if not already created
+    if (!data.receiptNumber) {
+        const timestamp = Date.now();
+        const randomComponent = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        data.receiptNumber = `SVEC-${timestamp.toString().slice(-6)}-${randomComponent}`;
+    }
+    
     const receiptText =
         "SRI VENKATESHWARA ENGINEERING COLLEGE\n" +
         "-------------------------------------\n" +
         "OFFICIAL FEE PAYMENT RECEIPT\n" +
         "\n" +
-        "Receipt No: SVEC-" + data.transactionId.slice(0, 8) + "\n" +
+        "Receipt No: " + data.receiptNumber + "\n" +
         "Date: " + new Date().toLocaleString() + "\n" +
         "\n" +
         "STUDENT INFORMATION:\n" +
@@ -755,96 +773,6 @@ function updatePaymentHistoryUI(payments) {
 
     if (payments.empty) {
         historyList.innerHTML = '<p>No payment history found for this student.</p>';
-    }
-}
-// Enhanced PDF Receipt Generation
-async function generateReceipt(data) {
-    try {
-        const { jsPDF } = window.jspdf;
-        if (!jsPDF) throw new Error("jspdf library not loaded");
-        
-        const doc = new jsPDF();
-        const pageWidth = doc.internal.pageSize.getWidth();
-         // Get current date and time
-         const now = new Date();
-         const formattedDate = now.toLocaleDateString();
-         const formattedTime = now.toLocaleTimeString();
-        
-        // Add College Header
-        doc.setFontSize(18);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(0, 107, 84); // College color theme
-        doc.text("SRI VENKATESHWARA ENGINEERING COLLEGE", pageWidth/2, 20, { align: 'center' });
-        
-        // Add College Subheader
-        doc.setFontSize(12);
-        doc.setTextColor(0, 0, 0);
-        doc.text("Affiliated to JNTU-H, Suryapet-508213, Telangana", pageWidth/2, 28, { align: 'center' });
-        
-        // Add Receipt Title
-        doc.setFontSize(16);
-        doc.text("OFFICIAL FEE PAYMENT RECEIPT", pageWidth/2, 38, { align: 'center' });
-        
-        // Add receipt details using autoTable
-        doc.autoTable({
-            startY: 45,
-            head: [[
-                { content: 'Student Details', styles: { fillColor: [158, 27, 50] } },
-                { content: 'Payment Details', styles: { fillColor: [158, 27, 50] } }
-            ]],
-            body: [
-                [
-                    `Student ID: ${data.studentId}\nName: ${data.studentName}\nCourse: ${data.course}\nYear: ${data.year}`,
-                    //`Receipt No: SVEC-${data.transactionId}\nDate: ${new Date().toLocaleDateString()}\nPayment Mode: ${data.paymentMethod}`
-                    `Receipt No: SVEC-${data.transactionId}\nDate: ${formattedDate}\nTime: ${formattedTime}\nPayment Mode: ${data.paymentMethod}`
-                ]
-            ],
-            styles: { cellPadding: 1, fontSize: 10 },
-            theme: 'grid'
-        });
-
-        // Add payment breakdown table
-        doc.autoTable({
-            startY: doc.lastAutoTable.finalY + 10,
-            head: [['Description', 'Amount (₹)']],
-            body: [
-                ['Total Fee', formatCurrency(data.amountPaid + data.newBalance)],
-                ['Amount Paid', formatCurrency(data.amountPaid)],
-                ['Balance Due', formatCurrency(data.newBalance)]
-            ],
-            styles: { 
-                fillColor: [240, 240, 240],
-                textColor: [0, 0, 0],
-                fontSize: 10
-            },
-            columnStyles: {
-                1: { cellWidth: 40, halign: 'right' }
-            }
-        });
-
-        // Add footer
-        const footerY = doc.lastAutoTable.finalY + 15;
-        doc.setFontSize(10);
-        doc.setTextColor(100);
-        doc.text(`Processed by: ${data.processedBy}`, 20, footerY);
-        doc.text("This is a computer generated receipt", pageWidth/2, footerY, { align: 'center' });
-        doc.text("Thank you for your payment!", pageWidth/2, footerY + 5, { align: 'center' });
-
-        // Save and store PDF
-        const fileName = `SVEC_Receipt_${data.studentId}_${Date.now()}.pdf`;
-        doc.save(fileName);
-        
-        // Store in Firestore
-        const pdfData = doc.output('datauristring');
-        await db.collection('receipts').doc(data.transactionId).set({
-            ...data,
-            pdfData,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-    } catch (error) {
-        console.error('PDF generation failed:', error);
-        generateSimpleReceipt(data);
     }
 }
 
