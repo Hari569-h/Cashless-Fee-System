@@ -825,8 +825,8 @@
         }
 
         // Handle authentication errors
-        function handleAuthError(error) {
-            let errorMessage = 'Authentication failed. Please try again.';
+ function handleAuthError(error) {
+            let errorMessage = 'Incorrect Email or Password';
             
             switch (error.code) {
                 case 'auth/invalid-email':
@@ -837,7 +837,7 @@
                     break;
                 case 'auth/user-not-found':
                 case 'auth/wrong-password':
-                    errorMessage = 'Invalid email or password';
+                    errorMessage = 'Incorrect Email or Password';
                     break;
                 case 'auth/too-many-requests':
                     errorMessage = 'Too many attempts. Please try again later';
